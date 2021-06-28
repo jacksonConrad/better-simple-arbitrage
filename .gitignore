@@ -1,5 +1,7 @@
+./Dockerfile
+
 /.idea
 /node_modules
 /build
 /tsconfig.tsbuildinfo
-Dockerfile
+
