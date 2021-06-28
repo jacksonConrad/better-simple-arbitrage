@@ -36,8 +36,7 @@ Dockerfile Usage
 
 _It is important to keep both the bot wallet private key and bundleExecutor owner private key secure. The bot wallet attempts to not lose WETH inside an arbitrage, but a malicious user would be able to drain the contract._
 
-navigate to the folder with the dockerfile in it. 
-open the dockerfile and fill in the variables with your own information
+Navigate to the folder with the dockerfile in it. Open the dockerfile and fill in the variables with your own information
 ```
 docker build . -t simple-arbitrage
 docker run -it --rm simple-arbitrage
