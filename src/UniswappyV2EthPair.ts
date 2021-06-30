@@ -5,15 +5,19 @@ import { UNISWAP_LOOKUP_CONTRACT_ADDRESS, WETH_ADDRESS } from "./addresses";
 import { CallDetails, EthMarket, MultipleCallData, TokenBalances } from "./EthMarket";
 import { ETHER } from "./utils";
 import { MarketsByToken } from "./Arbitrage";
+import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
 
 // batch count limit helpful for testing, loading entire set of uniswap markets takes a long time to load
 const BATCH_COUNT_LIMIT = 100;
-const UNISWAP_BATCH_SIZE = 1000
+const UNISWAP_BATCH_SIZE = 1000;
 
 // Not necessary, slightly speeds up loading initialization when we know tokens are bad
 // Estimate gas will ensure we aren't submitting bad bundles, but bad tokens waste time
 const blacklistTokens = [
-  '0xD75EA151a61d06868E31F8988D28DFE5E9df57B4'
+  '0xD75EA151a61d06868E31F8988D28DFE5E9df57B4',
+  '0x0000000000095413afC295d19EDeb1Ad7B71c952',
+  '0x9EA3b5b4EC044b70375236A281986106457b20EF',
+  '0x15874d65e649880c2614e7a480cb7c9a55787ff6',
 ]
 
 interface GroupedMarkets {
@@ -45,6 +49,9 @@ export class UniswappyV2EthPair extends EthMarket {
     return []
   }
 
+  // Get all pools for specified Uniswappy DEX
+  // 1. Fetch batch of pairs in DEX
+  // 2. For each pair in batch, store the token address (the other token must be WETH) and order of pair (WETH, LINK) vs (LINK, WETH)
   static async getUniswappyMarkets(provider: providers.JsonRpcProvider, factoryAddress: string): Promise<Array<UniswappyV2EthPair>> {
     const uniswapQuery = new Contract(UNISWAP_LOOKUP_CONTRACT_ADDRESS, UNISWAP_QUERY_ABI, provider);
 
@@ -63,7 +70,24 @@ export class UniswappyV2EthPair extends EthMarket {
         } else {
           continue;
         }
-        if (!blacklistTokens.includes(tokenAddress)) {
+
+        // If we haven't blacklisted the token & have never seen this address before,
+        // Add it to the UniswappyV2Pairs collection
+        const blacklisted = blacklistTokens.includes(tokenAddress);
+        const existingPair = await UniswappyV2PairDAO.getPairByAddress(marketAddress);
+
+        // Log if we found an existing pair
+        if(existingPair) { console.log('Pair already exists: ' + marketAddress); }
+
+        if (!blacklisted && !existingPair) {
+          // Save Pair to Collection
+          await UniswappyV2PairDAO.addPair({
+            marketAddress,
+            token0: pair[0],
+            token1: pair[1],
+            factoryAddress
+          });
+
           const uniswappyV2EthPair = new UniswappyV2EthPair(marketAddress, [pair[0], pair[1]], "");
           marketPairs.push(uniswappyV2EthPair);
         }
@@ -76,17 +100,29 @@ export class UniswappyV2EthPair extends EthMarket {
     return marketPairs
   }
 
+  // Fetch each pool for each factoryy
   static async getUniswapMarketsByToken(provider: providers.JsonRpcProvider, factoryAddresses: Array<string>): Promise<GroupedMarkets> {
+    console.log('getting UniswapMarkets by TOKEN');
     const allPairs = await Promise.all(
       _.map(factoryAddresses, factoryAddress => UniswappyV2EthPair.getUniswappyMarkets(provider, factoryAddress))
     )
+    // console.log(`All Pairs:`);
+    // console.log(allPairs);
+
+    // console.log('\n\n')
 
     const marketsByTokenAll = _.chain(allPairs)
       .flatten()
       .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
       .value()
 
+    // console.log('marketsByTokenAll');
+    // console.log(marketsByTokenAll);
+    // console.log('\n\n')
+
+    // Convert to a form that we can pass to .updateReserves
     const allMarketPairs = _.chain(
+      // Only get token pairs that exist in multiple markets
       _.pickBy(marketsByTokenAll, a => a.length > 1) // weird TS bug, chain'd pickBy is Partial<>
     )
       .values()
@@ -95,10 +131,15 @@ export class UniswappyV2EthPair extends EthMarket {
 
     await UniswappyV2EthPair.updateReserves(provider, allMarketPairs);
 
+    
     const marketsByToken = _.chain(allMarketPairs)
-      .filter(pair => (pair.getBalance(WETH_ADDRESS).gt(ETHER)))
+      // Filter out pairs that have more than 1 WETH in reserves
+      .filter(pair => (pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(5))))
+      // Group by the non-WETH token
       .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
       .value()
+
+    console.log(`Found ${marketsByToken.length} total pairs with sufficient liquidity to Arb.`)
 
     return {
       marketsByToken,

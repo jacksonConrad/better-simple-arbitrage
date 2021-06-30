@@ -9,7 +9,9 @@ import { getDefaultRelaySigningKey } from "./utils";
 
 const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || "http://127.0.0.1:8545"
 const PRIVATE_KEY = process.env.PRIVATE_KEY || ""
-const BUNDLE_EXECUTOR_ADDRESS = process.env.BUNDLE_EXECUTOR_ADDRESS || ""
+
+// No clue what this address points to.
+const BUNDLE_EXECUTOR_ADDRESS = process.env.BUNDLE_EXECUTOR_ADDRESS || "0xc35D77d25d81be78Ad60Ce14FEA7c92D438782E3";
 
 const FLASHBOTS_RELAY_SIGNING_KEY = process.env.FLASHBOTS_RELAY_SIGNING_KEY || getDefaultRelaySigningKey();
 
@@ -52,15 +54,31 @@ async function main() {
     flashbotsProvider,
     new Contract(BUNDLE_EXECUTOR_ADDRESS, BUNDLE_EXECUTOR_ABI, provider) )
 
+  // Fetch all markets for each factory we've specified
+  // TODO: Store in MongoDB to reduce startup time.
   const markets = await UniswappyV2EthPair.getUniswapMarketsByToken(provider, FACTORY_ADDRESSES);
+
+  // Listen for new block
   provider.on('block', async (blockNumber) => {
+    console.log(`Block number: ${blockNumber}`)
+
+    // On new block, update reserves of each market pair.
+    // TODO: more parallel processing
     await UniswappyV2EthPair.updateReserves(provider, markets.allMarketPairs);
+
+    // Calculate the best crossed markets
+    // TODO: simply use optimal input price based.  Store markets' arb index to more 
+    // quickly evaluate if there is an arb opportunity.
     const bestCrossedMarkets = await arbitrage.evaluateMarkets(markets.marketsByToken);
     if (bestCrossedMarkets.length === 0) {
       console.log("No crossed markets")
       return
     }
+
+    // Print all Crossed Markets (optimized for input amount)
     bestCrossedMarkets.forEach(Arbitrage.printCrossedMarket);
+
+    // Create and send bundles to FLASHBOTS
     arbitrage.takeCrossedMarkets(bestCrossedMarkets, blockNumber, MINER_REWARD_PERCENTAGE).then(healthcheck).catch(console.error)
   })
 }

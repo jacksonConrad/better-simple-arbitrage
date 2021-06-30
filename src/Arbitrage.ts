@@ -17,22 +17,29 @@ export type MarketsByToken = { [tokenAddress: string]: Array<EthMarket> }
 
 // TODO: implement binary search (assuming linear/exponential global maximum profitability)
 const TEST_VOLUMES = [
-  ETHER.div(100),
-  ETHER.div(10),
-  ETHER.div(6),
-  ETHER.div(4),
-  ETHER.div(2),
+  // ETHER.div(100),
+  // ETHER.div(10),
+  // ETHER.div(6),
+  // ETHER.div(4),
+  // ETHER.div(2),
   ETHER.div(1),
   ETHER.mul(2),
   ETHER.mul(5),
   ETHER.mul(10),
+  ETHER.mul(100),
+  ETHER.mul(138)
 ]
 
+// For each Crossed Market pair...
+// 1. Compute the direction of the trade
+// 2. Compute the input value which optimizes profit
 export function getBestCrossedMarket(crossedMarkets: Array<EthMarket>[], tokenAddress: string): CrossedMarketDetails | undefined {
   let bestCrossedMarket: CrossedMarketDetails | undefined = undefined;
   for (const crossedMarket of crossedMarkets) {
     const sellToMarket = crossedMarket[0]
     const buyFromMarket = crossedMarket[1]
+
+    // TODO: Simply calculate optimal amount based on reserves & fees of each market.
     for (const size of TEST_VOLUMES) {
       const tokensOutFromBuyingSize = buyFromMarket.getTokensOut(WETH_ADDRESS, tokenAddress, size);
       const proceedsFromSellingTokens = sellToMarket.getTokensOut(tokenAddress, WETH_ADDRESS, tokensOutFromBuyingSize)
@@ -126,7 +133,10 @@ export class Arbitrage {
   async takeCrossedMarkets(bestCrossedMarkets: CrossedMarketDetails[], blockNumber: number, minerRewardPercentage: number): Promise<void> {
     for (const bestCrossedMarket of bestCrossedMarkets) {
 
-      console.log("Send this much WETH", bestCrossedMarket.volume.toString(), "get this much profit", bestCrossedMarket.profit.toString())
+      console.log("Send this much WETH", bigNumberToDecimal(bestCrossedMarket.volume), "get this much profit", bigNumberToDecimal(bestCrossedMarket.profit))
+      // For now, don't submit bundle
+      continue;
+      /* 
       const buyCalls = await bestCrossedMarket.buyFromMarket.sellTokensToNextMarket(WETH_ADDRESS, bestCrossedMarket.volume, bestCrossedMarket.sellToMarket);
       const inter = bestCrossedMarket.buyFromMarket.getTokensOut(WETH_ADDRESS, bestCrossedMarket.tokenAddress, bestCrossedMarket.volume)
       const sellCallData = await bestCrossedMarket.sellToMarket.sellTokens(bestCrossedMarket.tokenAddress, inter, this.bundleExecutorContract.address);
@@ -139,6 +149,8 @@ export class Arbitrage {
         gasPrice: BigNumber.from(0),
         gasLimit: BigNumber.from(1000000),
       });
+
+
 
       try {
         const estimateGas = await this.bundleExecutorContract.provider.estimateGas(
@@ -153,8 +165,11 @@ export class Arbitrage {
         transaction.gasLimit = estimateGas.mul(2)
       } catch (e) {
         console.warn(`Estimate gas failure for ${JSON.stringify(bestCrossedMarket)}`)
+        console.error(e);
+        console.log('DONE; \n');
         continue
       }
+
       const bundledTransactions = [
         {
           signer: this.executorWallet,
@@ -177,6 +192,8 @@ export class Arbitrage {
         ))
       await Promise.all(bundlePromises)
       return
+      */
+
     }
     throw new Error("No arbitrage submitted to relay")
   }
