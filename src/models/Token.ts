@@ -1,10 +1,11 @@
 import mongooseService from '../clients/mongoose';
 
 interface CreateTokenDTO {
-  sym: string;
-  name: string;
+  sym?: string;
+  name?: string;
   address: string;
-  decimals: number;
+  decimals?: number;
+  blacklisted?: boolean;
 }
 
 class Token {
@@ -15,7 +16,8 @@ class Token {
     address: String,
     name: String,
     sym: String,
-    decimals: Number
+    decimals: Number,
+    blacklisted: Boolean
   }, { id: false })
 
   Token = mongooseService.getMongoose().model('Tokens', this.tokenSchema);

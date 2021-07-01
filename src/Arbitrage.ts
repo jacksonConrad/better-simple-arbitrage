@@ -21,7 +21,7 @@ const TEST_VOLUMES = [
   // ETHER.div(10),
   // ETHER.div(6),
   // ETHER.div(4),
-  // ETHER.div(2),
+  ETHER.div(2),
   ETHER.div(1),
   ETHER.mul(2),
   ETHER.mul(5),
@@ -104,6 +104,10 @@ export class Arbitrage {
     for (const tokenAddress in marketsByToken) {
       const markets = marketsByToken[tokenAddress]
       const pricedMarkets = _.map(markets, (ethMarket: EthMarket) => {
+
+        // For each market, compute reserves ratio of each pair to determine arb index
+        // If arb index > 1.003, there may be an arb opportunity.
+        // Compute the optimal input amount.
         return {
           ethMarket: ethMarket,
           buyTokenPrice: ethMarket.getTokensIn(tokenAddress, WETH_ADDRESS, ETHER.div(100)),
@@ -133,7 +137,7 @@ export class Arbitrage {
   async takeCrossedMarkets(bestCrossedMarkets: CrossedMarketDetails[], blockNumber: number, minerRewardPercentage: number): Promise<void> {
     for (const bestCrossedMarket of bestCrossedMarkets) {
 
-      console.log("Send this much WETH", bigNumberToDecimal(bestCrossedMarket.volume), "get this much profit", bigNumberToDecimal(bestCrossedMarket.profit))
+      // console.log("Send this much WETH", bigNumberToDecimal(bestCrossedMarket.volume), "get this much profit", bigNumberToDecimal(bestCrossedMarket.profit))
       // For now, don't submit bundle
       continue;
       /* 
@@ -195,6 +199,7 @@ export class Arbitrage {
       */
 
     }
-    throw new Error("No arbitrage submitted to relay")
+    console.log("\n--- No arbitrage submitted to relay. ---\n")
+    // throw new Error("No arbitrage submitted to relay")
   }
 }

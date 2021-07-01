@@ -3,7 +3,7 @@ import { BigNumber, Contract, providers } from "ethers";
 import { UNISWAP_PAIR_ABI, UNISWAP_QUERY_ABI, ERC20_TOKEN_ABI } from "./abi";
 import { UNISWAP_LOOKUP_CONTRACT_ADDRESS, WETH_ADDRESS } from "./addresses";
 import { CallDetails, EthMarket, MultipleCallData, TokenBalances } from "./EthMarket";
-import { ETHER } from "./utils";
+import { ETHER, bigNumberToDecimal } from "./utils";
 import { MarketsByToken } from "./Arbitrage";
 import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
 import PairAtBlock from "./models/PairAtBlock";
@@ -15,11 +15,8 @@ const UNISWAP_BATCH_SIZE = 1000;
 
 // Not necessary, slightly speeds up loading initialization when we know tokens are bad
 // Estimate gas will ensure we aren't submitting bad bundles, but bad tokens waste time
-const blacklistTokens = [
-  '0xD75EA151a61d06868E31F8988D28DFE5E9df57B4',
-  '0x0000000000095413afC295d19EDeb1Ad7B71c952',
-  '0x9EA3b5b4EC044b70375236A281986106457b20EF',
-  '0x15874d65e649880c2614e7a480cb7c9a55787ff6',
+const TOKEN_BLACKLIST = [
+  '0x9EA3b5b4EC044b70375236A281986106457b20EF'
 ]
 
 interface GroupedMarkets {
@@ -51,85 +48,162 @@ export class UniswappyV2EthPair extends EthMarket {
     return []
   }
 
+  static async processPair(pair: Array<string>, factoryAddress: string, provider: providers.JsonRpcProvider) {
+    const marketAddress = pair[2];
+    let tokenAddress: string;
+
+    if (pair[0] === WETH_ADDRESS) {
+      tokenAddress = pair[1]
+    } else if (pair[1] === WETH_ADDRESS) {
+      tokenAddress = pair[0]
+    } else {
+      return;
+    }
+    const onManualBlacklist = TOKEN_BLACKLIST.includes(tokenAddress);
+
+    if(onManualBlacklist) {
+      console.log('MANUAL BLACKLIST!!!!! ' + tokenAddress)
+      return;
+    }
+
+    // Fetch Token data if we've never seen it before
+    let blacklistedToken = false;
+    for (let k=0; k<2; k++) {
+      const _tokenAddr = pair[k];
+      const token = await TokenDAO.getToken(_tokenAddr);
+      
+      if (token && token.blacklisted) {
+        blacklistedToken = true;
+      }
+
+
+
+      if (!token) { 
+        console.log('Fetching data for new token: ' + _tokenAddr)
+
+        const contract = new Contract(_tokenAddr, ERC20_TOKEN_ABI, provider);
+        
+        let decimals = 18;
+        let name = '- xxx -';
+        let sym = '---';
+
+        // Some ERC20s are whack, apparently.
+        try {
+          name = await contract.name();
+          sym = await contract.symbol();
+          decimals = await contract.decimals();
+
+        } catch (e) {
+          // Skip over tokens that don't implement standard ERC20 methods. (For now).
+          console.error(`Blacklisting token at address ${_tokenAddr}`);
+          TokenDAO.addToken({ address: _tokenAddr, blacklisted: true });
+          blacklistedToken = true;
+          continue;
+        }
+
+        console.log(`Adding new token: ${sym} - ${name} - ${decimals}`);
+        await TokenDAO.addToken({ address: _tokenAddr, sym, name, decimals, blacklisted: false });
+
+      }
+    }
+
+    // If we haven't blacklisted the token & have never seen this address before,
+    // Add it to the UniswappyV2Pairs collection
+    const existingPair = await UniswappyV2PairDAO.getPairByAddress(marketAddress);
+
+    // Remove pairs that have blacklisted token
+    if(blacklistedToken && existingPair) {
+      console.log('Deleting pair with blacklisted token...');
+      await UniswappyV2PairDAO.deletePairByAddress(marketAddress);
+    }
+
+    // Only add pairs w/o blacklisted tokens
+    if (!blacklistedToken && !existingPair) {
+      // Save Pair to Collection
+      await UniswappyV2PairDAO.addPair({
+        marketAddress,
+        token0: pair[0],
+        token1: pair[1],
+        factoryAddress
+      });
+
+      // const uniswappyV2EthPair = new UniswappyV2EthPair(marketAddress, [pair[0], pair[1]], "");
+      // marketPairs.push(uniswappyV2EthPair);
+    }
+  };
+
   // Get all pools for specified Uniswappy DEX
   // 1. Fetch batch of pairs in DEX
   // 2. For each pair in batch, store the token address (the other token must be WETH) and order of pair (WETH, LINK) vs (LINK, WETH)
   static async getUniswappyMarkets(provider: providers.JsonRpcProvider, factoryAddress: string): Promise<Array<UniswappyV2EthPair>> {
+    console.log(`GET MARKETS FOR FACTORY ${factoryAddress}`)
     const uniswapQuery = new Contract(UNISWAP_LOOKUP_CONTRACT_ADDRESS, UNISWAP_QUERY_ABI, provider);
 
     const marketPairs = new Array<UniswappyV2EthPair>()
-    for (let i = 0; i < BATCH_COUNT_LIMIT * UNISWAP_BATCH_SIZE; i += UNISWAP_BATCH_SIZE) {
-      const pairs: Array<Array<string>> = (await uniswapQuery.functions.getPairsByIndexRange(factoryAddress, i, i + UNISWAP_BATCH_SIZE))[0];
-      for (let i = 0; i < pairs.length; i++) {
-        const pair = pairs[i];
-        const marketAddress = pair[2];
-        let tokenAddress: string;
+    let startingIndex = 46000;
+    let promises = [];
+    for (let i = startingIndex; i < BATCH_COUNT_LIMIT * UNISWAP_BATCH_SIZE; i += UNISWAP_BATCH_SIZE) {
+      console.log(`${factoryAddress} - ${i} - ${i + UNISWAP_BATCH_SIZE}`);
+      let pairs: Array<Array<string>>;
+      try {
+        pairs = (await uniswapQuery.functions.getPairsByIndexRange(factoryAddress, i, i + UNISWAP_BATCH_SIZE))[0];
+      } catch (e) {
+        continue;
+      }
+      
 
-        if (pair[0] === WETH_ADDRESS) {
-          tokenAddress = pair[1]
-        } else if (pair[1] === WETH_ADDRESS) {
-          tokenAddress = pair[0]
-        } else {
-          continue;
-        }
-
-        
-
-        // Fetch Token data if we've never seen it before
-        for (let i=0; i<2; i++) {
-          const _tokenAddr = pair[i];
-          const token = await TokenDAO.getToken(_tokenAddr);
-          if (!token) { 
-            console.log('Fetching data for new token: ' + _tokenAddr)
-
-            const contract = new Contract(_tokenAddr, ERC20_TOKEN_ABI, provider);
-            
-            let decimals = 18;
-            let name = '- xxx -';
-            let sym = '---';
-
-            // Some ERC20s are whack, apparently.
-            try {
-              name = await contract.name();
-              sym = await contract.symbol();
-              decimals = await contract.decimals();
-
-            } catch (e) {
-              // Skip over tokens that don't implement standard ERC20 methods. (For now).
-              console.error(`Error fetching dtat for token token "${name}", "${sym}" at address ${_tokenAddr}`);
-              continue;
-            }
-
-            console.log(`Adding new token: ${sym} - ${name} - ${decimals}`);
-            await TokenDAO.addToken({ address: _tokenAddr, sym, name, decimals });
-
-          }
-        }
-
-        // If we haven't blacklisted the token & have never seen this address before,
-        // Add it to the UniswappyV2Pairs collection
-        const blacklisted = blacklistTokens.includes(tokenAddress);
-        const existingPair = await UniswappyV2PairDAO.getPairByAddress(marketAddress);
-
-        if (!blacklisted && !existingPair) {
-          // Save Pair to Collection
-          await UniswappyV2PairDAO.addPair({
-            marketAddress,
-            token0: pair[0],
-            token1: pair[1],
-            factoryAddress
-          });
-
-          const uniswappyV2EthPair = new UniswappyV2EthPair(marketAddress, [pair[0], pair[1]], "");
-          marketPairs.push(uniswappyV2EthPair);
-        }
+      console.log(`${factoryAddress} - BATCH ${i}`);
+      
+      for (let j = 0; j < pairs.length; j++) {
+        // console.log(`Processing Pair ${j+1}/${pairs.length} in batch ${i}`)
+        const pair = pairs[j];
+        promises.push(this.processPair(pair, factoryAddress, provider));
       }
       if (pairs.length < UNISWAP_BATCH_SIZE) {
         break
       }
     }
 
+    console.log(`\n\n------------- Kicking off monster of a Promise.all()!!!! -----------------\n\n`);
+    await Promise.all(promises);
+    console.log(`\n\n------------- Promise.all() Finished!!!!!!!!! -----------------\n\n`);
     return marketPairs
+  }
+
+  static async mapReduceUniswapMarketsByToken(provider: providers.JsonRpcProvider, allPairs: Array<UniswappyV2EthPair>): Promise<GroupedMarkets> {
+    
+    const marketsByTokenAll = _.chain(allPairs)
+      .filter(pair => {
+        return !TOKEN_BLACKLIST.includes(pair.tokens[0]) && !TOKEN_BLACKLIST.includes(pair.tokens[1])
+      })
+      .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
+      .value();
+
+    // Convert to a form that we can pass to updateReserves
+    const allMarketPairs = _.chain(
+      // Only get token pairs that exist in multiple markets
+      _.pickBy(marketsByTokenAll, a => a.length > 1) // weird TS bug, chain'd pickBy is Partial<>
+    )
+      .values()
+      .flatten()
+      .value()
+
+    
+    await UniswappyV2EthPair.updateReserves(provider, allMarketPairs, -1);
+
+    const marketsByToken = _.chain(allMarketPairs)
+      // Filter out pairs that have more than 1 WETH in reserves
+      .filter(pair => {
+        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(5))
+      })
+      // Group by the non-WETH token
+      .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
+      .value()
+    
+    return {
+      allMarketPairs,
+      marketsByToken
+    };
   }
 
   // Fetch each pool for each factoryy
@@ -138,6 +212,8 @@ export class UniswappyV2EthPair extends EthMarket {
     const allPairs = await Promise.all(
       _.map(factoryAddresses, factoryAddress => UniswappyV2EthPair.getUniswappyMarkets(provider, factoryAddress))
     )
+
+    console.log(`\n\n------ DONE GETTING ALL PAIRS ------\n\n`);
 
     const marketsByTokenAll = _.chain(allPairs)
       .flatten()
@@ -153,9 +229,8 @@ export class UniswappyV2EthPair extends EthMarket {
       .flatten()
       .value()
 
-    await UniswappyV2EthPair.updateReserves(provider, allMarketPairs);
+    await UniswappyV2EthPair.updateReserves(provider, allMarketPairs, -1);
 
-    
     const marketsByToken = _.chain(allMarketPairs)
       // Filter out pairs that have more than 1 WETH in reserves
       .filter(pair => (pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(5))))
@@ -171,16 +246,41 @@ export class UniswappyV2EthPair extends EthMarket {
     }
   }
 
-  static async updateReserves(provider: providers.JsonRpcProvider, allMarketPairs: Array<UniswappyV2EthPair>): Promise<void> {
+  static async updateReserves(
+    provider: providers.JsonRpcProvider,
+    allMarketPairs: Array<UniswappyV2EthPair>,
+    blockNumber: number
+    ): Promise<void> {
     const uniswapQuery = new Contract(UNISWAP_LOOKUP_CONTRACT_ADDRESS, UNISWAP_QUERY_ABI, provider);
+
     const pairAddresses = allMarketPairs.map(marketPair => marketPair.marketAddress);
-    console.log("Updating markets, count:", pairAddresses.length)
+    console.log("Updating market reserves, count:", pairAddresses.length)
+
     const reserves: Array<Array<BigNumber>> = (await uniswapQuery.functions.getReservesByPairs(pairAddresses))[0];
     for (let i = 0; i < allMarketPairs.length; i++) {
       const marketPair = allMarketPairs[i];
       const reserve = reserves[i]
+
       marketPair.setReservesViaOrderedBalances([reserve[0], reserve[1]])
+      if (blockNumber > 0) {
+        await PairAtBlock.addPairAtBlock({
+          marketAddress: pairAddresses[i],
+          blockNumber,
+          reserves0: reserve[0].toString(),
+          reserves1: reserve[1].toString()
+        })
+        
+        // const tokenAddress = marketPair.tokens[0] === WETH_ADDRESS ? marketPair.tokens[1] :  marketPair.tokens[0];
+        // try{
+        //   console.log(`Reserves: ${bigNumberToDecimal(marketPair.getBalance(WETH_ADDRESS))} - ${bigNumberToDecimal(marketPair.getBalance(tokenAddress))}`)
+        // } catch(e) {
+        //   console.log('weird big number error')
+        // }
+        
+      }
+
     }
+    console.log('Reserves updated.');
   }
 
   getBalance(tokenAddress: string): BigNumber {

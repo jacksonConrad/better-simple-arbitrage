@@ -6,6 +6,7 @@ import { FACTORY_ADDRESSES } from "./addresses";
 import { Arbitrage } from "./Arbitrage";
 import { get } from "https"
 import { getDefaultRelaySigningKey } from "./utils";
+import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
 
 const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || "http://127.0.0.1:8545"
 const PRIVATE_KEY = process.env.PRIVATE_KEY || ""
@@ -56,7 +57,14 @@ async function main() {
 
   // Fetch all markets for each factory we've specified
   // TODO: Store in MongoDB to reduce startup time.
-  const markets = await UniswappyV2EthPair.getUniswapMarketsByToken(provider, FACTORY_ADDRESSES);
+  // const markets = await UniswappyV2EthPair.getUniswapMarketsByToken(provider, FACTORY_ADDRESSES);
+  
+  // Initialize Our Markets
+  const allPairs = await UniswappyV2PairDAO.getAllWETHPairAddresses();
+  const markets = await UniswappyV2EthPair.mapReduceUniswapMarketsByToken(provider, allPairs);
+
+  // console.log(markets.allMarketPairs);
+  console.log(`Found ${Object.keys(markets.marketsByToken).length} total pairs with sufficient liquidity to Arb.`)
 
   // Listen for new block
   provider.on('block', async (blockNumber) => {
@@ -64,14 +72,16 @@ async function main() {
 
     // On new block, update reserves of each market pair.
     // TODO: more parallel processing
-    await UniswappyV2EthPair.updateReserves(provider, markets.allMarketPairs);
+    await UniswappyV2EthPair.updateReserves(provider, markets.allMarketPairs, blockNumber);
+    
 
     // Calculate the best crossed markets
     // TODO: simply use optimal input price based.  Store markets' arb index to more 
     // quickly evaluate if there is an arb opportunity.
+
     const bestCrossedMarkets = await arbitrage.evaluateMarkets(markets.marketsByToken);
     if (bestCrossedMarkets.length === 0) {
-      console.log("No crossed markets")
+      console.log("No crossed markets\n")
       return
     }
 
@@ -80,6 +90,7 @@ async function main() {
 
     // Create and send bundles to FLASHBOTS
     arbitrage.takeCrossedMarkets(bestCrossedMarkets, blockNumber, MINER_REWARD_PERCENTAGE).then(healthcheck).catch(console.error)
+
   })
 }
 

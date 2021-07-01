@@ -1,10 +1,11 @@
 import mongooseService from '../clients/mongoose';
+import { BigNumber } from 'ethers';
 
 interface CreatePairAtBlockDTO {
   marketAddress: string;
   blockNumber: number;
-  reserves0: number;
-  reserves1: number;
+  reserves0: string;
+  reserves1: string;
 }
 
 class PairAtBlock {
@@ -14,8 +15,8 @@ class PairAtBlock {
     _id: String,
     marketAddress: String,
     blockNumber: Number,
-    reserves0: Number,
-    reserves1: Number
+    reserves0: String,
+    reserves1: String
   }, { id: false })
 
   PairAtBlock = mongooseService.getMongoose().model('PairsAtBlocks', this.pairAtBlockSchema);
