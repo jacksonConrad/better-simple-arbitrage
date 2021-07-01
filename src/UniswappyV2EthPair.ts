@@ -6,7 +6,7 @@ import { CallDetails, EthMarket, MultipleCallData, TokenBalances } from "./EthMa
 import { ETHER, bigNumberToDecimal } from "./utils";
 import { MarketsByToken } from "./Arbitrage";
 import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
-import PairAtBlock from "./models/PairAtBlock";
+import { PairAtBlock, CreatePairAtBlockDTO, PairAtBlockDTO } from "./models/PairAtBlock";
 import TokenDAO from "./models/Token";
 
 // batch count limit helpful for testing, loading entire set of uniswap markets takes a long time to load
@@ -257,29 +257,25 @@ export class UniswappyV2EthPair extends EthMarket {
     console.log("Updating market reserves, count:", pairAddresses.length)
 
     const reserves: Array<Array<BigNumber>> = (await uniswapQuery.functions.getReservesByPairs(pairAddresses))[0];
+    let pairsAtBlock: CreatePairAtBlockDTO[] = [];
     for (let i = 0; i < allMarketPairs.length; i++) {
       const marketPair = allMarketPairs[i];
       const reserve = reserves[i]
 
       marketPair.setReservesViaOrderedBalances([reserve[0], reserve[1]])
+
       if (blockNumber > 0) {
-        await PairAtBlock.addPairAtBlock({
+        pairsAtBlock.push({
           marketAddress: pairAddresses[i],
           blockNumber,
           reserves0: reserve[0].toString(),
           reserves1: reserve[1].toString()
         })
-        
-        // const tokenAddress = marketPair.tokens[0] === WETH_ADDRESS ? marketPair.tokens[1] :  marketPair.tokens[0];
-        // try{
-        //   console.log(`Reserves: ${bigNumberToDecimal(marketPair.getBalance(WETH_ADDRESS))} - ${bigNumberToDecimal(marketPair.getBalance(tokenAddress))}`)
-        // } catch(e) {
-        //   console.log('weird big number error')
-        // }
-        
       }
-
     }
+    
+    // TODO: Add config flag to skip saving, to speed up search time.
+    await PairAtBlock.batchAddPairsAtBlocks(pairsAtBlock);
     console.log('Reserves updated.');
   }
 

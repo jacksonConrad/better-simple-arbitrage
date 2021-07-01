@@ -1,14 +1,22 @@
 import mongooseService from '../clients/mongoose';
 import { BigNumber } from 'ethers';
 
-interface CreatePairAtBlockDTO {
+export interface CreatePairAtBlockDTO {
   marketAddress: string;
   blockNumber: number;
   reserves0: string;
   reserves1: string;
 }
 
-class PairAtBlock {
+export interface PairAtBlockDTO {
+  _id: string;
+  marketAddress: string;
+  blockNumber: number;
+  reserves0: string;
+  reserves1: string;
+}
+
+class PairAtBlockModel {
   Schema = mongooseService.getMongoose().Schema;
 
   pairAtBlockSchema = new this.Schema({
@@ -25,6 +33,10 @@ class PairAtBlock {
     // console.log('PairAtBlock constructor');
   }
 
+  async batchAddPairsAtBlocks(docs: Array<CreatePairAtBlockDTO>) {
+    await this.PairAtBlock.insertMany(docs);
+  }
+
   async addPairAtBlock(fields: CreatePairAtBlockDTO) {
     const pairAtBlock = new this.PairAtBlock({
         _id: `${fields.blockNumber}-${fields.marketAddress}`,
@@ -39,4 +51,5 @@ class PairAtBlock {
   }
 }
 
-export default new PairAtBlock();
+export const PairAtBlock = new PairAtBlockModel()
+// export PairAtBlock;
