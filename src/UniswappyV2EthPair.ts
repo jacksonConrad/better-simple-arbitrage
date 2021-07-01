@@ -1,11 +1,13 @@
 import * as _ from "lodash";
 import { BigNumber, Contract, providers } from "ethers";
-import { UNISWAP_PAIR_ABI, UNISWAP_QUERY_ABI } from "./abi";
+import { UNISWAP_PAIR_ABI, UNISWAP_QUERY_ABI, ERC20_TOKEN_ABI } from "./abi";
 import { UNISWAP_LOOKUP_CONTRACT_ADDRESS, WETH_ADDRESS } from "./addresses";
 import { CallDetails, EthMarket, MultipleCallData, TokenBalances } from "./EthMarket";
 import { ETHER } from "./utils";
 import { MarketsByToken } from "./Arbitrage";
 import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
+import PairAtBlock from "./models/PairAtBlock";
+import TokenDAO from "./models/Token";
 
 // batch count limit helpful for testing, loading entire set of uniswap markets takes a long time to load
 const BATCH_COUNT_LIMIT = 100;
@@ -71,13 +73,43 @@ export class UniswappyV2EthPair extends EthMarket {
           continue;
         }
 
+        
+
+        // Fetch Token data if we've never seen it before
+        for (let i=0; i<2; i++) {
+          const _tokenAddr = pair[i];
+          const token = await TokenDAO.getToken(_tokenAddr);
+          if (!token) { 
+            console.log('Fetching data for new token: ' + _tokenAddr)
+
+            const contract = new Contract(_tokenAddr, ERC20_TOKEN_ABI, provider);
+            
+            let decimals = 18;
+            let name = '- xxx -';
+            let sym = '---';
+
+            // Some ERC20s are whack, apparently.
+            try {
+              name = await contract.name();
+              sym = await contract.symbol();
+              decimals = await contract.decimals();
+
+            } catch (e) {
+              // Skip over tokens that don't implement standard ERC20 methods. (For now).
+              console.error(`Error fetching dtat for token token "${name}", "${sym}" at address ${_tokenAddr}`);
+              continue;
+            }
+
+            console.log(`Adding new token: ${sym} - ${name} - ${decimals}`);
+            await TokenDAO.addToken({ address: _tokenAddr, sym, name, decimals });
+
+          }
+        }
+
         // If we haven't blacklisted the token & have never seen this address before,
         // Add it to the UniswappyV2Pairs collection
         const blacklisted = blacklistTokens.includes(tokenAddress);
         const existingPair = await UniswappyV2PairDAO.getPairByAddress(marketAddress);
-
-        // Log if we found an existing pair
-        if(existingPair) { console.log('Pair already exists: ' + marketAddress); }
 
         if (!blacklisted && !existingPair) {
           // Save Pair to Collection
@@ -106,19 +138,11 @@ export class UniswappyV2EthPair extends EthMarket {
     const allPairs = await Promise.all(
       _.map(factoryAddresses, factoryAddress => UniswappyV2EthPair.getUniswappyMarkets(provider, factoryAddress))
     )
-    // console.log(`All Pairs:`);
-    // console.log(allPairs);
-
-    // console.log('\n\n')
 
     const marketsByTokenAll = _.chain(allPairs)
       .flatten()
       .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
       .value()
-
-    // console.log('marketsByTokenAll');
-    // console.log(marketsByTokenAll);
-    // console.log('\n\n')
 
     // Convert to a form that we can pass to .updateReserves
     const allMarketPairs = _.chain(

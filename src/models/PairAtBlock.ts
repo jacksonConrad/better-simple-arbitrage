@@ -18,19 +18,23 @@ class PairAtBlock {
     reserves1: Number
   }, { id: false })
 
-  PairAtBlock = mongooseService.getMongoose().model('UniswappyV2Pairs', this.pairAtBlockSchema);
+  PairAtBlock = mongooseService.getMongoose().model('PairsAtBlocks', this.pairAtBlockSchema);
 
   constructor() {
     // console.log('PairAtBlock constructor');
   }
 
-  async addPair(fields: CreatePairAtBlockDTO) {
+  async addPairAtBlock(fields: CreatePairAtBlockDTO) {
     const pairAtBlock = new this.PairAtBlock({
         _id: `${fields.blockNumber}-${fields.marketAddress}`,
         ...fields
     });
     await pairAtBlock.save();
     return fields.marketAddress;
+  }
+
+  async getPairAtBlock(marketAddress: string, blockNumber: number) {
+    return this.PairAtBlock.findOne({ _id: `${blockNumber}-${marketAddress}` }).populate('PairAtBlock').exec();
   }
 }
 
