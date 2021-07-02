@@ -38,10 +38,13 @@ export abstract class EthMarket {
     this._protocol = protocol;
   }
 
+  abstract getBalance(tokenAddress: string): BigNumber;
 
   abstract getTokensOut(tokenIn: string, tokenOut: string, amountIn: BigNumber): BigNumber;
 
   abstract getTokensIn(tokenIn: string, tokenOut: string, amountOut: BigNumber): BigNumber;
+
+  abstract getReservesRatioInWETH(): number;
 
   abstract sellTokensToNextMarket(tokenIn: string, amountIn: BigNumber, ethMarket: EthMarket): Promise<MultipleCallData>
 

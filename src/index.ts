@@ -73,12 +73,12 @@ async function main() {
     // On new block, update reserves of each market pair.
     // TODO: more parallel processing
     await UniswappyV2EthPair.updateReserves(provider, markets.allMarketPairs, blockNumber);
-    
+  
+    // TODO: re-compute marketsByToken so we don't rule out markets that didnt' have efficient
+    // liquidity to be considered when we started the app, but eventually gain sufficient liquidity while
+    // app is running.
 
     // Calculate the best crossed markets
-    // TODO: simply use optimal input price based.  Store markets' arb index to more 
-    // quickly evaluate if there is an arb opportunity.
-
     const bestCrossedMarkets = await arbitrage.evaluateMarkets(markets.marketsByToken);
     if (bestCrossedMarkets.length === 0) {
       console.log("No crossed markets\n")

@@ -273,7 +273,7 @@ export class UniswappyV2EthPair extends EthMarket {
         })
       }
     }
-    
+
     // TODO: Add config flag to skip saving, to speed up search time.
     await PairAtBlock.batchAddPairsAtBlocks(pairsAtBlock);
     console.log('Reserves updated.');
@@ -319,6 +319,31 @@ export class UniswappyV2EthPair extends EthMarket {
     const numerator = amountInWithFee.mul(reserveOut);
     const denominator = reserveIn.mul(1000).add(amountInWithFee);
     return numerator.div(denominator);
+  }
+
+  getReservesRatioInWETH(): number {
+    const tokenAddress = this.tokens[0] === WETH_ADDRESS ? this.tokens[1] : this.tokens[0];
+
+    const wethReserves = this._tokenBalances[WETH_ADDRESS];
+    const tokenReserves = this._tokenBalances[tokenAddress];
+
+    // console.log('WETH Reserves: ' + wethReserves.toString());
+    // console.log('Token Reserves: ' + tokenReserves.toString());
+
+    // For now, naively just calculate token ratio w/ no decimals
+    let _ratio = wethReserves.div(tokenReserves);
+    let ratio: number;
+    if (_ratio.isZero()) {
+      ratio = tokenReserves.div(wethReserves).toNumber();
+      ratio = (1/ratio);
+    }
+    else {
+      ratio = _ratio.toNumber();
+    }
+    // console.log('Ratio: ' + ratio.toFixed(4));
+    console.log();
+    // TODO :Get decimals for token.  WETH has 18 decimals
+    return ratio;
   }
 
   async sellTokensToNextMarket(tokenIn: string, amountIn: BigNumber, ethMarket: EthMarket): Promise<MultipleCallData> {
