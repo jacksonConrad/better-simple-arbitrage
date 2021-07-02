@@ -49,7 +49,12 @@ function healthcheck() {
 async function main() {
   console.log("Searcher Wallet Address: " + await arbitrageSigningWallet.getAddress())
   console.log("Flashbots Relay Signing Wallet Address: " + await flashbotsRelaySigningWallet.getAddress())
-  const flashbotsProvider = await FlashbotsBundleProvider.create(provider, flashbotsRelaySigningWallet);
+  const flashbotsProvider = await FlashbotsBundleProvider.create(
+    provider,
+    flashbotsRelaySigningWallet,
+    "https://relay-goerli.flashbots.net",
+    "goerli"
+  );
   const arbitrage = new Arbitrage(
     arbitrageSigningWallet,
     flashbotsProvider,
