@@ -3,7 +3,7 @@ import { Contract, providers, Wallet } from "ethers";
 import { BUNDLE_EXECUTOR_ABI } from "./abi";
 import { UniswappyV2EthPair } from "./UniswappyV2EthPair";
 import { FACTORY_ADDRESSES } from "./addresses";
-import { Arbitrage } from "./Arbitrage";
+import { Arbitrage, CrossedMarketDetails } from "./Arbitrage";
 import { get } from "https"
 import { getDefaultRelaySigningKey } from "./utils";
 import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
@@ -55,8 +55,14 @@ async function main() {
     flashbotsProvider,
     new Contract(BUNDLE_EXECUTOR_ADDRESS, BUNDLE_EXECUTOR_ABI, provider) )
 
-  // Fetch all markets for each factory we've specified
-  // TODO: Store in MongoDB to reduce startup time.
+  /*
+   *  UNCOMMENT LINE BELOW on first run to seed database.
+   *    This will take a very long time (hours) and if you are using an free Infura node, you will
+   *    run out of request before it finishes.
+   *  
+   *    I recommend using a Moralis SpeedyNode which has no limits and is free.
+   */
+  
   // const markets = await UniswappyV2EthPair.getUniswapMarketsByToken(provider, FACTORY_ADDRESSES);
   
   // Initialize Our Markets
@@ -64,11 +70,11 @@ async function main() {
   const markets = await UniswappyV2EthPair.mapReduceUniswapMarketsByToken(provider, allPairs);
 
   // console.log(markets.allMarketPairs);
-  console.log(`Found ${Object.keys(markets.marketsByToken).length} total pairs with sufficient liquidity to Arb.`)
+  console.log(`Found ${Object.keys(markets.marketsByToken).length} total pairs with sufficient liquidity to Arb.\n\n\n`)
 
   // Listen for new block
   provider.on('block', async (blockNumber) => {
-    console.log(`Block number: ${blockNumber}`)
+    console.log(`---------------------------- Block number: ${blockNumber} --------------------------\n\n`)
 
     // On new block, update reserves of each market pair.
     // TODO: more parallel processing
@@ -86,7 +92,9 @@ async function main() {
     }
 
     // Print all Crossed Markets (optimized for input amount)
-    bestCrossedMarkets.forEach(Arbitrage.printCrossedMarket);
+    for( const crossedMarket of bestCrossedMarkets) {
+      await Arbitrage.printCrossedWETHMarket(crossedMarket);
+    }
 
     // Create and send bundles to FLASHBOTS
     arbitrage.takeCrossedMarkets(bestCrossedMarkets, blockNumber, MINER_REWARD_PERCENTAGE).then(healthcheck).catch(console.error)

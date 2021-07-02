@@ -1,5 +1,5 @@
 import * as _ from "lodash";
-import { BigNumber, Contract, providers } from "ethers";
+import { BigNumber, FixedNumber, Contract, providers } from "ethers";
 import { UNISWAP_PAIR_ABI, UNISWAP_QUERY_ABI, ERC20_TOKEN_ABI } from "./abi";
 import { UNISWAP_LOOKUP_CONTRACT_ADDRESS, WETH_ADDRESS } from "./addresses";
 import { CallDetails, EthMarket, MultipleCallData, TokenBalances } from "./EthMarket";
@@ -327,21 +327,17 @@ export class UniswappyV2EthPair extends EthMarket {
     const wethReserves = this._tokenBalances[WETH_ADDRESS];
     const tokenReserves = this._tokenBalances[tokenAddress];
 
-    // console.log('WETH Reserves: ' + wethReserves.toString());
-    // console.log('Token Reserves: ' + tokenReserves.toString());
-
     // For now, naively just calculate token ratio w/ no decimals
     let _ratio = wethReserves.div(tokenReserves);
     let ratio: number;
     if (_ratio.isZero()) {
+      // console.log('inverting ratio for token ' + tokenAddress);
       ratio = tokenReserves.div(wethReserves).toNumber();
       ratio = (1/ratio);
     }
     else {
       ratio = _ratio.toNumber();
     }
-    // console.log('Ratio: ' + ratio.toFixed(4));
-    console.log();
     // TODO :Get decimals for token.  WETH has 18 decimals
     return ratio;
   }
