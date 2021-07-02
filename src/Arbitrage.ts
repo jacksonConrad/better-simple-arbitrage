@@ -187,7 +187,8 @@ export class Arbitrage {
     return bestCrossedMarkets
   }
 
-  // TODO: take more than 1
+  // TODO: If multiple arb opportunities exists in block, create a new transaction for each (or include them all in the same transaction)
+  // ... whichever option is more gas efficient.
   async takeCrossedMarkets(bestCrossedMarkets: CrossedMarketDetails[], blockNumber: number, minerRewardPercentage: number): Promise<void> {
     for (const bestCrossedMarket of bestCrossedMarkets) {
 

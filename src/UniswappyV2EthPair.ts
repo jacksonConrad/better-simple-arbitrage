@@ -140,9 +140,8 @@ export class UniswappyV2EthPair extends EthMarket {
     const uniswapQuery = new Contract(UNISWAP_LOOKUP_CONTRACT_ADDRESS, UNISWAP_QUERY_ABI, provider);
 
     const marketPairs = new Array<UniswappyV2EthPair>()
-    let startingIndex = 46000;
     let promises = [];
-    for (let i = startingIndex; i < BATCH_COUNT_LIMIT * UNISWAP_BATCH_SIZE; i += UNISWAP_BATCH_SIZE) {
+    for (let i = 0; i < BATCH_COUNT_LIMIT * UNISWAP_BATCH_SIZE; i += UNISWAP_BATCH_SIZE) {
       console.log(`${factoryAddress} - ${i} - ${i + UNISWAP_BATCH_SIZE}`);
       let pairs: Array<Array<string>>;
       try {
@@ -194,7 +193,7 @@ export class UniswappyV2EthPair extends EthMarket {
     const marketsByToken = _.chain(allMarketPairs)
       // Filter out pairs that have more than 1 WETH in reserves
       .filter(pair => {
-        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(5))
+        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(1))
       })
       // Group by the non-WETH token
       .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])

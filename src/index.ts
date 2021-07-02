@@ -8,7 +8,7 @@ import { get } from "https"
 import { getDefaultRelaySigningKey } from "./utils";
 import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
 
-const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || "http://127.0.0.1:8545"
+const ETHEREUM_RPC_URL = process.env.ETHEREUM_GOERLI_RPC_URL || "http://127.0.0.1:8545"
 const PRIVATE_KEY = process.env.PRIVATE_KEY || ""
 
 // No clue what this address points to.
@@ -62,8 +62,8 @@ async function main() {
    *  
    *    I recommend using a Moralis SpeedyNode which has no limits and is free.
    */
-  
-  // const markets = await UniswappyV2EthPair.getUniswapMarketsByToken(provider, FACTORY_ADDRESSES);
+
+  // await UniswappyV2EthPair.getUniswapMarketsByToken(provider, FACTORY_ADDRESSES);
   
   // Initialize Our Markets
   const allPairs = await UniswappyV2PairDAO.getAllWETHPairAddresses();
