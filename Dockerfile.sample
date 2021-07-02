@@ -3,9 +3,10 @@ FROM node:10
 WORKDIR /home/simple-arb
 COPY package*.json ./
 RUN npm install
-ENV ETHEREUM_RPC_URL=<RPC_URL>
-ENV PRIVATE_KEY=<PRIVATE_KEY>
-ENV BUNDLE_EXECUTOR_ADDRESS=<BUNDLE_EXECUTOR_ADDRESS>
+ENV ETHEREUM_RPC_URL="https://speedy-nodes-nyc.moralis.io/<YOUR_MORALIS_KEY>/eth/mainnet"
+ENV ETHEREUM_GOERLI_RPC_URL="https://speedy-nodes-nyc.moralis.io/<YOUR_MORALIS_KEY>/eth/goerli"
+ENV PRIVATE_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ENV BUNDLE_EXECUTOR_ADDRESS="0x0000000000000000000000000000000000"
 COPY . .
 # CMD ["/bin/sh"]
 CMD ["npm","run","start"]
