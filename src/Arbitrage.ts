@@ -97,7 +97,7 @@ export async function getBestCrossedMarket(crossedMarkets: Array<EthMarket>[], t
       // Set as bestCrossedMarket if this is the first market for this token
       // OR
       // if this crossed market is more profitable than a previous one
-      if ((bestCrossedMarket === undefined || profit > bestCrossedMarket.profit) && profit && profit > .001) {
+      if ((bestCrossedMarket === undefined || profit > bestCrossedMarket.profit) && profit && profit > .0001) {
         
         
         // console.log(`PARAMS for token: ${tokenAddress}`)
@@ -123,7 +123,7 @@ export async function getBestCrossedMarket(crossedMarkets: Array<EthMarket>[], t
         }
       }
       else {
-        // console.log(`Skipping token ${tokenAddress} - Volume: ${_deltaBeta}, Profit: ${profit}`);
+        console.log(`Skipping token ${tokenAddress} - Volume: ${_deltaBeta}, Profit: ${profit}`);
       }
     } catch (e) {
       console.error('SOME OTHER ERROR COMPUTING OPTIMAL ARBITRAGE PRICE - Token: ' + tokenAddress)
@@ -202,7 +202,7 @@ export class Arbitrage {
           // Threshold for arbitrage opportunities across constant product markets
           // generally is 1.003^n, where n is the number of swaps performed.
           // This assumes an exchange fee of 0.3%
-          if (arbIndex > 1.003**2) {
+          if (arbIndex > 1.003) {
             //                 [ marketToBuyEthFrom,     marketToSellEthTo ]
             crossedMarkets.push([pm.ethMarket, pricedMarket.ethMarket])
           }
@@ -210,7 +210,7 @@ export class Arbitrage {
       }
 
       const bestCrossedMarket = await getBestCrossedMarket(crossedMarkets, tokenAddress);
-      if (bestCrossedMarket !== undefined && bestCrossedMarket.profit > .001)  {
+      if (bestCrossedMarket !== undefined && bestCrossedMarket.profit > .0001)  {
         bestCrossedMarkets.push(bestCrossedMarket)
       }
     }
