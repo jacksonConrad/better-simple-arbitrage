@@ -44,7 +44,7 @@ export abstract class EthMarket {
 
   abstract getTokensIn(tokenIn: string, tokenOut: string, amountOut: BigNumber): BigNumber;
 
-  abstract getReservesRatioInWETH(): number;
+  abstract getReservesRatioInWETH(): Promise<number>;
 
   abstract sellTokensToNextMarket(tokenIn: string, amountIn: BigNumber, ethMarket: EthMarket): Promise<MultipleCallData>
 

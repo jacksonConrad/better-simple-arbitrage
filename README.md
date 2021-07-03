@@ -6,15 +6,15 @@ We hope you will use this repository as an example of how to integrate Flashbots
 
 Environment Variables
 =====================
-- **ETHEREUM_RPC_URL** - Ethereum RPC endpoint. Can not be the same as FLASHBOTS_RPC_URL
-- **PRIVATE_KEY** - Private key for the Ethereum EOA that will be submitting Flashbots Ethereum transactions
+- **ETHEREUM_RPC_URL** - Ethereum RPC endpoint. Can use Infura or Moralis SpeedyNode.  I prefer Moralis for development because its free and there are no request limits.
+- **PRIVATE_KEY** - Private key for the Ethereum EOA that will be submitting Flashbots Ethereum transactions.  I recommend setting up a MetaMask account and using that private key.
 - **FLASHBOTS_RELAY_SIGNING_KEY** _[Optional, default: random]_ - Flashbots submissions require an Ethereum private key to sign transaction payloads. This newly-created account does not need to hold any funds or correlate to any on-chain activity, it just needs to be used across multiple Flashbots RPC requests to identify requests related to same searcher. Please see https://docs.flashbots.net/flashbots-auction/searchers/faq#do-i-need-authentication-to-access-the-flashbots-relay
 - **HEALTHCHECK_URL** _[Optional]_ - Health check URL, hit only after successfully submitting a bundle.
 - **MINER_REWARD_PERCENTAGE** _[Optional, default 80]_ - 0 -> 100, what percentage of overall profitability to send to miner.
 
 Usage
 ======================
-1. Generate a new bot wallet address and extract the private key into a raw 32-byte format.
+1. Generate a new bot wallet address (i.e. MetaMask) and extract the private key into a raw 32-byte format.
 2. Deploy the included BundleExecutor.sol to Ethereum, from a secured account, with the address of the newly created wallet as the constructor argument
 3. Transfer WETH to the newly deployed BundleExecutor
 
@@ -28,17 +28,12 @@ $ PRIVATE_KEY=__PRIVATE_KEY_FROM_ABOVE__ \
       npm run start
 ```
 
-Dockerfile Usage
+Docker Usage
 ======================
-1. Generate a new bot wallet address and extract the private key into a raw 32-byte format.
-2. Deploy the included BundleExecutor.sol to Ethereum, from a secured account, with the address of the newly created wallet as the constructor argument
-3. Transfer WETH to the newly deployed BundleExecutor
 
-_It is important to keep both the bot wallet private key and bundleExecutor owner private key secure. The bot wallet attempts to not lose WETH inside an arbitrage, but a malicious user would be able to drain the contract._
-
-Navigate to the folder with the dockerfile in it. Open the dockerfile and fill in the variables with your own information
+Create a Dockerfile from Dockerfile.sample with your personal env variables. Dockerfile is .gitignored
+Bundle Executor adddress can be any random string if you don't plan on actually submitting bundles.
 ```
-docker build . -t simple-arbitrage
-docker run -it --rm simple-arbitrage
+docker-compose up --build
 ```
 

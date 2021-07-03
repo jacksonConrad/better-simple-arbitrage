@@ -320,13 +320,21 @@ export class UniswappyV2EthPair extends EthMarket {
     return numerator.div(denominator);
   }
 
-  getReservesRatioInWETH(): number {
+  async getReservesRatioInWETH(): Promise<number> {
     const tokenAddress = this.tokens[0] === WETH_ADDRESS ? this.tokens[1] : this.tokens[0];
 
-    const wethReserves = this._tokenBalances[WETH_ADDRESS];
-    const tokenReserves = this._tokenBalances[tokenAddress];
+    const token = await TokenDAO.getToken(tokenAddress);
+    const tokenDecimals = token.decimals;
 
-    // For now, naively just calculate token ratio w/ no decimals
+    const _wethReserves = this._tokenBalances[WETH_ADDRESS];
+    const _tokenReserves = this._tokenBalances[tokenAddress];
+
+    // Normalize reserves w/ decimals
+    // Multiply by 10,000 to keep number big, in case reserves are small. We only care about ratio.
+    const wethReserves = (_wethReserves.mul(10000)).div(BigNumber.from(10).pow(18))
+    const tokenReserves = (_tokenReserves.mul(10000)).div(BigNumber.from(10).pow(tokenDecimals))
+
+
     let _ratio = wethReserves.div(tokenReserves);
     let ratio: number;
     if (_ratio.isZero()) {

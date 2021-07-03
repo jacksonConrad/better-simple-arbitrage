@@ -3,7 +3,7 @@ import { BigNumber, Contract, Wallet } from "ethers";
 import { FlashbotsBundleProvider } from "@flashbots/ethers-provider-bundle";
 import { WETH_ADDRESS } from "./addresses";
 import { EthMarket } from "./EthMarket";
-import { ETHER, bigNumberToDecimal } from "./utils";
+import { ETHER, bigNumberToDecimal, veryBigNumberToDecimal } from "./utils";
 import Token from "./models/Token";
 
 export interface CrossedMarketDetails {
@@ -21,22 +21,48 @@ export type MarketsByToken = { [tokenAddress: string]: Array<EthMarket> }
 // For each Crossed Market pair...
 // 1. Compute the optimal input amount
 // 2. Compute the optimal profit
-export function getBestCrossedMarket(crossedMarkets: Array<EthMarket>[], tokenAddress: string): CrossedMarketDetails | undefined {
+export async function getBestCrossedMarket(crossedMarkets: Array<EthMarket>[], tokenAddress: string): Promise<CrossedMarketDetails | undefined> {
   let bestCrossedMarket: CrossedMarketDetails | undefined = undefined;
   
   for (const crossedMarket of crossedMarkets) {
+    const buyWETHMarket = crossedMarket[0]
+    const sellWETHMarket = crossedMarket[1]
+
+    let buyTokenReserves, sellTokenReserves;
+    const token = await Token.getToken(tokenAddress)
+
+    // Convert reserves from BigNumber to JS native number type
+    // This avoids underflow errors/small decimal values being rounded to 0
+    // but potentially introduces JS precision issues.
+
+    const buyWETHReserves = bigNumberToDecimal(buyWETHMarket.getBalance(WETH_ADDRESS))
+    const sellWETHReserves = bigNumberToDecimal(sellWETHMarket.getBalance(WETH_ADDRESS))
 
     try {
-      const buyWETHMarket = crossedMarket[0]
-      const sellWETHMarket = crossedMarket[1]
+      buyTokenReserves = bigNumberToDecimal(buyWETHMarket.getBalance(tokenAddress), token.decimals)
+      sellTokenReserves = bigNumberToDecimal(sellWETHMarket.getBalance(tokenAddress), token.decimals)
+    } catch(e) {}
 
-      // Convert from BigNumber to JS native number type
-      // This avoids underflow errors/small decimal values being rounded to 0
-      // but potentially introduces JS precision issues.
-      const buyWETHReserves = bigNumberToDecimal(buyWETHMarket.getBalance(WETH_ADDRESS))
-      const buyTokenReserves = bigNumberToDecimal(buyWETHMarket.getBalance(tokenAddress))
-      const sellWETHReserves = bigNumberToDecimal(sellWETHMarket.getBalance(WETH_ADDRESS));
-      const sellTokenReserves = bigNumberToDecimal(sellWETHMarket.getBalance(tokenAddress));
+    if (!buyTokenReserves || !sellTokenReserves) {
+      try {
+        buyTokenReserves = veryBigNumberToDecimal(buyWETHMarket.getBalance(tokenAddress), token.decimals)
+        sellTokenReserves = veryBigNumberToDecimal(sellWETHMarket.getBalance(tokenAddress), token.decimals)
+      } catch(e) { 
+        console.error('Error computing best markets for token: ' + tokenAddress + ' - Overflow or Underflow error');
+        console.error(`
+          marketAWETHReserves: ${buyWETHMarket.getBalance(WETH_ADDRESS)}\n
+          marketATokenReserves: ${buyWETHMarket.getBalance(tokenAddress)}\n
+          marketBWETHReserves: ${sellWETHMarket.getBalance(WETH_ADDRESS)}\n
+          marketBTokenReserves: ${sellWETHMarket.getBalance(tokenAddress)}\n   
+        `)
+        continue;
+      }
+    }
+
+    try {
+
+    
+    
 
       // If we can't get any token from either market, skip.
       if(buyTokenReserves === 0 && sellTokenReserves === 0) {
@@ -96,8 +122,11 @@ export function getBestCrossedMarket(crossedMarkets: Array<EthMarket>[], tokenAd
           sellToMarket: sellWETHMarket
         }
       }
+      else {
+        // console.log(`Skipping token ${tokenAddress} - Volume: ${_deltaBeta}, Profit: ${profit}`);
+      }
     } catch (e) {
-      console.error('Error computing best markets for token: ' + tokenAddress + ' - Overflow or Underflow error');
+      console.error('SOME OTHER ERROR COMPUTING OPTIMAL ARBITRAGE PRICE - Token: ' + tokenAddress)
     }
   }
   return bestCrossedMarket;
@@ -148,16 +177,18 @@ export class Arbitrage {
 
     for (const tokenAddress in marketsByToken) {
       const markets = marketsByToken[tokenAddress]
-      const pricedMarkets = _.map(markets, (ethMarket: EthMarket) => {
+      const pricedMarkets = await Promise.all(
+        _.map(markets, async (ethMarket: EthMarket) => {
 
-        // Get reserve ratio in terms of WETH to determine arb indexes
-        let reserveRatioInWETH: number = ethMarket.getReservesRatioInWETH();
-        
-        return {
-          ethMarket: ethMarket,
-          reserveRatioInWETH
-        }
-      });
+          // Get reserve ratio in terms of WETH to determine arb indexes
+          let reserveRatioInWETH: number = await ethMarket.getReservesRatioInWETH();
+          
+          return {
+            ethMarket: ethMarket,
+            reserveRatioInWETH
+          }
+        })
+      );
       
       // Compute the optimal input amount.
       const crossedMarkets = new Array<Array<EthMarket>>()
@@ -171,14 +202,14 @@ export class Arbitrage {
           // Threshold for arbitrage opportunities across constant product markets
           // generally is 1.003^n, where n is the number of swaps performed.
           // This assumes an exchange fee of 0.3%
-          if (arbIndex > 1.003 ** 2) {
+          if (arbIndex > 1.003**2) {
             //                 [ marketToBuyEthFrom,     marketToSellEthTo ]
             crossedMarkets.push([pm.ethMarket, pricedMarket.ethMarket])
           }
         })
       }
 
-      const bestCrossedMarket = getBestCrossedMarket(crossedMarkets, tokenAddress);
+      const bestCrossedMarket = await getBestCrossedMarket(crossedMarkets, tokenAddress);
       if (bestCrossedMarket !== undefined && bestCrossedMarket.profit > .001)  {
         bestCrossedMarkets.push(bestCrossedMarket)
       }
