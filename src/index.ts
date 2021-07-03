@@ -12,11 +12,11 @@ const ETHEREUM_RPC_URL = process.env.ETHEREUM_GOERLI_RPC_URL || "http://127.0.0.
 const PRIVATE_KEY = process.env.PRIVATE_KEY || ""
 
 // No clue what this address points to.
-const BUNDLE_EXECUTOR_ADDRESS = process.env.BUNDLE_EXECUTOR_ADDRESS || "0xc35D77d25d81be78Ad60Ce14FEA7c92D438782E3";
+const BUNDLE_EXECUTOR_ADDRESS = process.env.BUNDLE_EXECUTOR_ADDRESS_GOERLI || "0xc35D77d25d81be78Ad60Ce14FEA7c92D438782E3";
 
 const FLASHBOTS_RELAY_SIGNING_KEY = process.env.FLASHBOTS_RELAY_SIGNING_KEY || getDefaultRelaySigningKey();
 
-const MINER_REWARD_PERCENTAGE = parseInt(process.env.MINER_REWARD_PERCENTAGE || "80")
+const MINER_REWARD_PERCENTAGE = parseInt(process.env.MINER_REWARD_PERCENTAGE || "50")
 
 if (PRIVATE_KEY === "") {
   console.warn("Must provide PRIVATE_KEY environment variable")
@@ -58,6 +58,7 @@ async function main() {
   const arbitrage = new Arbitrage(
     arbitrageSigningWallet,
     flashbotsProvider,
+    provider,
     new Contract(BUNDLE_EXECUTOR_ADDRESS, BUNDLE_EXECUTOR_ABI, provider) )
 
   /*
