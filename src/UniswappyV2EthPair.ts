@@ -22,6 +22,7 @@ const TOKEN_BLACKLIST = [
 interface GroupedMarkets {
   marketsByToken: MarketsByToken;
   allMarketPairs: Array<UniswappyV2EthPair>;
+  filteredMarketPairs: Array<UniswappyV2EthPair>;
 }
 
 export class UniswappyV2EthPair extends EthMarket {
@@ -140,8 +141,8 @@ export class UniswappyV2EthPair extends EthMarket {
     const uniswapQuery = new Contract(UNISWAP_LOOKUP_CONTRACT_ADDRESS, UNISWAP_QUERY_ABI, provider);
 
     const marketPairs = new Array<UniswappyV2EthPair>()
-    let startingIndex = 46000;
-    let promises = [];
+    const  startingIndex = 46000;
+    const promises = [];
     for (let i = startingIndex; i < BATCH_COUNT_LIMIT * UNISWAP_BATCH_SIZE; i += UNISWAP_BATCH_SIZE) {
       console.log(`${factoryAddress} - ${i} - ${i + UNISWAP_BATCH_SIZE}`);
       let pairs: Array<Array<string>>;
@@ -192,16 +193,24 @@ export class UniswappyV2EthPair extends EthMarket {
     await UniswappyV2EthPair.updateReserves(provider, allMarketPairs, -1);
 
     const marketsByToken = _.chain(allMarketPairs)
-      // Filter out pairs that have more than 1 WETH in reserves
+      // Filter out pairs that have more than 5 WETH in reserves
       .filter(pair => {
-        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(10))
+        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(3))
       })
       // Group by the non-WETH token
       .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
+      // .filter(group => group.length > 1)
+      .value()
+
+    const filteredMarketPairs = _.chain(allMarketPairs)
+      .filter(pair => {
+        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(3))
+      })
       .value()
     
     return {
       allMarketPairs,
+      filteredMarketPairs,
       marketsByToken
     };
   }
@@ -238,10 +247,17 @@ export class UniswappyV2EthPair extends EthMarket {
       .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
       .value()
 
+    const filteredMarketPairs = _.chain(allMarketPairs)
+      .filter(pair => {
+        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(5))
+      })
+      .value()
+
     console.log(`Found ${marketsByToken.length} total pairs with sufficient liquidity to Arb.`)
 
     return {
       marketsByToken,
+      filteredMarketPairs,
       allMarketPairs
     }
   }
@@ -257,7 +273,7 @@ export class UniswappyV2EthPair extends EthMarket {
     console.log("Updating market reserves, count:", pairAddresses.length)
 
     const reserves: Array<Array<BigNumber>> = (await uniswapQuery.functions.getReservesByPairs(pairAddresses))[0];
-    let pairsAtBlock: CreatePairAtBlockDTO[] = [];
+    // let pairsAtBlock: CreatePairAtBlockDTO[] = [];
     for (let i = 0; i < allMarketPairs.length; i++) {
       const marketPair = allMarketPairs[i];
       const reserve = reserves[i]
@@ -265,18 +281,18 @@ export class UniswappyV2EthPair extends EthMarket {
       marketPair.setReservesViaOrderedBalances([reserve[0], reserve[1]])
 
       if (blockNumber > 0) {
-        pairsAtBlock.push({
-          marketAddress: pairAddresses[i],
-          blockNumber,
-          reserves0: reserve[0].toString(),
-          reserves1: reserve[1].toString()
-        })
+        // pairsAtBlock.push({
+        //   marketAddress: pairAddresses[i],
+        //   blockNumber,
+        //   reserves0: reserve[0].toString(),
+        //   reserves1: reserve[1].toString()
+        // })
       }
     }
 
     // TODO: Add config flag to skip saving, to speed up search time.
-    await PairAtBlock.batchAddPairsAtBlocks(pairsAtBlock);
-    console.log('Reserves updated.');
+    // await PairAtBlock.batchAddPairsAtBlocks(pairsAtBlock);
+    // console.log('Reserves updated.');
   }
 
   getBalance(tokenAddress: string): BigNumber {
@@ -336,7 +352,7 @@ export class UniswappyV2EthPair extends EthMarket {
     const tokenReserves = (_tokenReserves.mul(10000)).div(BigNumber.from(10).pow(tokenDecimals))
 
 
-    let _ratio = wethReserves.div(tokenReserves);
+    const _ratio = wethReserves.div(tokenReserves);
     let ratio: number;
     if (_ratio.isZero()) {
       // console.log('inverting ratio for token ' + tokenAddress);

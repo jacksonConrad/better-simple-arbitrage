@@ -16,7 +16,7 @@ const BUNDLE_EXECUTOR_ADDRESS = process.env.BUNDLE_EXECUTOR_ADDRESS || "0xc35D77
 
 const FLASHBOTS_RELAY_SIGNING_KEY = process.env.FLASHBOTS_RELAY_SIGNING_KEY || getDefaultRelaySigningKey();
 
-const MINER_REWARD_PERCENTAGE = parseInt(process.env.MINER_REWARD_PERCENTAGE || "80")
+const MINER_REWARD_PERCENTAGE = parseInt(process.env.MINER_REWARD_PERCENTAGE || "50")
 
 if (PRIVATE_KEY === "") {
   console.warn("Must provide PRIVATE_KEY environment variable")
@@ -53,6 +53,7 @@ async function main() {
   const arbitrage = new Arbitrage(
     arbitrageSigningWallet,
     flashbotsProvider,
+    provider,
     new Contract(BUNDLE_EXECUTOR_ADDRESS, BUNDLE_EXECUTOR_ABI, provider) )
 
   /*
@@ -70,15 +71,17 @@ async function main() {
   const markets = await UniswappyV2EthPair.mapReduceUniswapMarketsByToken(provider, allPairs);
 
   // console.log(markets.allMarketPairs);
-  console.log(`Found ${Object.keys(markets.marketsByToken).length} total pairs with sufficient liquidity to Arb.\n\n\n`)
+  console.log(`Found ${Object.keys(markets.marketsByToken).length} token across ${markets.filteredMarketPairs.length} pools with sufficient liquidity to Arb.\n\n\n`)
 
   // Listen for new block
   provider.on('block', async (blockNumber) => {
-    console.log(`---------------------------- Block number: ${blockNumber} --------------------------\n\n`)
+    const now = new Date();
+    console.log(`---------------------------- Block number: ${blockNumber}, ${now.getTime()} --------------------------\n\n`)
 
     // On new block, update reserves of each market pair.
     // TODO: more parallel processing
-    await UniswappyV2EthPair.updateReserves(provider, markets.allMarketPairs, blockNumber);
+    await UniswappyV2EthPair.updateReserves(provider, markets.filteredMarketPairs, blockNumber);
+    console.log(`Block number: ${blockNumber}, Reserves updated: ${((new Date()).getTime() - now.getTime())/1000}`)
   
     // TODO: re-compute marketsByToken so we don't rule out markets that didnt' have efficient
     // liquidity to be considered when we started the app, but eventually gain sufficient liquidity while
@@ -90,6 +93,7 @@ async function main() {
       console.log("No crossed markets\n")
       return
     }
+    console.log(`Block number: ${blockNumber}, Markets Evaluated ${((new Date()).getTime() - now.getTime())/1000}`)
 
     // Print all Crossed Markets (optimized for input amount)
     for( const crossedMarket of bestCrossedMarkets) {
@@ -97,8 +101,11 @@ async function main() {
     }
 
     // Create and send bundles to FLASHBOTS
-    await arbitrage.takeCrossedMarkets(bestCrossedMarkets, blockNumber, MINER_REWARD_PERCENTAGE).then(healthcheck).catch(console.error)
-
+    return await arbitrage.takeCrossedMarkets(bestCrossedMarkets, blockNumber, MINER_REWARD_PERCENTAGE).then(() => {
+      healthcheck();
+      console.log(`Block number: ${blockNumber}, Took crossed markets: ${((new Date()).getTime() - now.getTime())/1000}`)
+      return;
+    }).catch(console.error)
   })
 }
 
