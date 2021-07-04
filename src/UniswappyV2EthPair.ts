@@ -22,6 +22,7 @@ const TOKEN_BLACKLIST = [
 interface GroupedMarkets {
   marketsByToken: MarketsByToken;
   allMarketPairs: Array<UniswappyV2EthPair>;
+  filteredMarketPairs: Array<UniswappyV2EthPair>;
 }
 
 export class UniswappyV2EthPair extends EthMarket {
@@ -130,7 +131,7 @@ export class UniswappyV2EthPair extends EthMarket {
       // const uniswappyV2EthPair = new UniswappyV2EthPair(marketAddress, [pair[0], pair[1]], "");
       // marketPairs.push(uniswappyV2EthPair);
     }
-  };
+  }
 
   // Get all pools for specified Uniswappy DEX
   // 1. Fetch batch of pairs in DEX
@@ -140,7 +141,7 @@ export class UniswappyV2EthPair extends EthMarket {
     const uniswapQuery = new Contract(UNISWAP_LOOKUP_CONTRACT_ADDRESS, UNISWAP_QUERY_ABI, provider);
 
     const marketPairs = new Array<UniswappyV2EthPair>()
-    let promises = [];
+    const promises = [];
     for (let i = 0; i < BATCH_COUNT_LIMIT * UNISWAP_BATCH_SIZE; i += UNISWAP_BATCH_SIZE) {
       console.log(`${factoryAddress} - ${i} - ${i + UNISWAP_BATCH_SIZE}`);
       let pairs: Array<Array<string>>;
@@ -191,58 +192,37 @@ export class UniswappyV2EthPair extends EthMarket {
     await UniswappyV2EthPair.updateReserves(provider, allMarketPairs, -1);
 
     const marketsByToken = _.chain(allMarketPairs)
-      // Filter out pairs that have more than 1 WETH in reserves
+      // Filter out pairs that have more than 5 WETH in reserves
       .filter(pair => {
         return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(1))
       })
       // Group by the non-WETH token
       .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
+      // .filter(group => group.length > 1)
+      .value()
+
+    const filteredMarketPairs = _.chain(allMarketPairs)
+      .filter(pair => {
+        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(1))
+      })
       .value()
     
     return {
       allMarketPairs,
+      filteredMarketPairs,
       marketsByToken
     };
   }
 
   // Fetch each pool for each factoryy
-  static async getUniswapMarketsByToken(provider: providers.JsonRpcProvider, factoryAddresses: Array<string>): Promise<GroupedMarkets> {
+  static async getUniswapMarketsByToken(provider: providers.JsonRpcProvider, factoryAddresses: Array<string>): Promise<void> {
     console.log('getting UniswapMarkets by TOKEN');
-    const allPairs = await Promise.all(
+    await Promise.all(
       _.map(factoryAddresses, factoryAddress => UniswappyV2EthPair.getUniswappyMarkets(provider, factoryAddress))
     )
 
     console.log(`\n\n------ DONE GETTING ALL PAIRS ------\n\n`);
-
-    const marketsByTokenAll = _.chain(allPairs)
-      .flatten()
-      .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
-      .value()
-
-    // Convert to a form that we can pass to .updateReserves
-    const allMarketPairs = _.chain(
-      // Only get token pairs that exist in multiple markets
-      _.pickBy(marketsByTokenAll, a => a.length > 1) // weird TS bug, chain'd pickBy is Partial<>
-    )
-      .values()
-      .flatten()
-      .value()
-
-    await UniswappyV2EthPair.updateReserves(provider, allMarketPairs, -1);
-
-    const marketsByToken = _.chain(allMarketPairs)
-      // Filter out pairs that have more than 1 WETH in reserves
-      .filter(pair => (pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(5))))
-      // Group by the non-WETH token
-      .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
-      .value()
-
-    console.log(`Found ${marketsByToken.length} total pairs with sufficient liquidity to Arb.`)
-
-    return {
-      marketsByToken,
-      allMarketPairs
-    }
+    return;
   }
 
   static async updateReserves(
@@ -256,7 +236,7 @@ export class UniswappyV2EthPair extends EthMarket {
     console.log("Updating market reserves, count:", pairAddresses.length)
 
     const reserves: Array<Array<BigNumber>> = (await uniswapQuery.functions.getReservesByPairs(pairAddresses))[0];
-    let pairsAtBlock: CreatePairAtBlockDTO[] = [];
+    // let pairsAtBlock: CreatePairAtBlockDTO[] = [];
     for (let i = 0; i < allMarketPairs.length; i++) {
       const marketPair = allMarketPairs[i];
       const reserve = reserves[i]
@@ -264,18 +244,18 @@ export class UniswappyV2EthPair extends EthMarket {
       marketPair.setReservesViaOrderedBalances([reserve[0], reserve[1]])
 
       if (blockNumber > 0) {
-        pairsAtBlock.push({
-          marketAddress: pairAddresses[i],
-          blockNumber,
-          reserves0: reserve[0].toString(),
-          reserves1: reserve[1].toString()
-        })
+        // pairsAtBlock.push({
+        //   marketAddress: pairAddresses[i],
+        //   blockNumber,
+        //   reserves0: reserve[0].toString(),
+        //   reserves1: reserve[1].toString()
+        // })
       }
     }
 
     // TODO: Add config flag to skip saving, to speed up search time.
-    await PairAtBlock.batchAddPairsAtBlocks(pairsAtBlock);
-    console.log('Reserves updated.');
+    // await PairAtBlock.batchAddPairsAtBlocks(pairsAtBlock);
+    // console.log('Reserves updated.');
   }
 
   getBalance(tokenAddress: string): BigNumber {
@@ -335,7 +315,7 @@ export class UniswappyV2EthPair extends EthMarket {
     const tokenReserves = (_tokenReserves.mul(10000)).div(BigNumber.from(10).pow(tokenDecimals))
 
 
-    let _ratio = wethReserves.div(tokenReserves);
+    const _ratio = wethReserves.div(tokenReserves);
     let ratio: number;
     if (_ratio.isZero()) {
       // console.log('inverting ratio for token ' + tokenAddress);
