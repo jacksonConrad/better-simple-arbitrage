@@ -9,7 +9,7 @@ import { getDefaultRelaySigningKey } from "./utils";
 import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
 
 const ETHEREUM_RPC_URL = process.env.ETHEREUM_GOERLI_RPC_URL || "http://127.0.0.1:8545"
-const PRIVATE_KEY = process.env.PRIVATE_KEY || ""
+const PRIVATE_KEY_GOERLI = process.env.PRIVATE_KEY_GOERLI || ""
 
 // No clue what this address points to.
 const BUNDLE_EXECUTOR_ADDRESS = process.env.BUNDLE_EXECUTOR_ADDRESS_GOERLI || "0xc35D77d25d81be78Ad60Ce14FEA7c92D438782E3";
@@ -18,8 +18,8 @@ const FLASHBOTS_RELAY_SIGNING_KEY = process.env.FLASHBOTS_RELAY_SIGNING_KEY || g
 
 const MINER_REWARD_PERCENTAGE = parseInt(process.env.MINER_REWARD_PERCENTAGE || "20")
 
-if (PRIVATE_KEY === "") {
-  console.warn("Must provide PRIVATE_KEY environment variable")
+if (PRIVATE_KEY_GOERLI === "") {
+  console.warn("Must provide PRIVATE_KEY_GOERLI environment variable")
   process.exit(1)
 }
 if (BUNDLE_EXECUTOR_ADDRESS === "") {
@@ -36,7 +36,7 @@ const HEALTHCHECK_URL = process.env.HEALTHCHECK_URL || ""
 
 const provider = new providers.StaticJsonRpcProvider(ETHEREUM_RPC_URL);
 
-const arbitrageSigningWallet = new Wallet(PRIVATE_KEY);
+const arbitrageSigningWallet = new Wallet(PRIVATE_KEY_GOERLI);
 const flashbotsRelaySigningWallet = new Wallet(FLASHBOTS_RELAY_SIGNING_KEY);
 
 function healthcheck() {
@@ -68,7 +68,7 @@ async function main() {
    *  
    *    I recommend using a Moralis SpeedyNode which has no limits and is free.
    */
-  
+
   // await UniswappyV2EthPair.getUniswapMarketsByToken(provider, FACTORY_ADDRESSES);
   
   // Initialize Our Markets
