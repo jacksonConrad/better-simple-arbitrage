@@ -7,7 +7,7 @@ import { ETHER, bigNumberToDecimal } from "./utils";
 import { MarketsByToken } from "./Arbitrage";
 import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
 import { PairAtBlock, CreatePairAtBlockDTO, PairAtBlockDTO } from "./models/PairAtBlock";
-import TokenDAO from "./models/Token";
+import Token from "./models/Token";
 
 // batch count limit helpful for testing, loading entire set of uniswap markets takes a long time to load
 const BATCH_COUNT_LIMIT = 100;
@@ -73,7 +73,7 @@ export class UniswappyV2EthPair extends EthMarket {
     let blacklistedToken = false;
     for (let k=0; k<2; k++) {
       const _tokenAddr = pair[k];
-      const token = await TokenDAO.getToken(_tokenAddr);
+      const token = await Token.getToken(_tokenAddr);
       
       if (token && token.blacklisted) {
         blacklistedToken = true;
@@ -99,13 +99,13 @@ export class UniswappyV2EthPair extends EthMarket {
         } catch (e) {
           // Skip over tokens that don't implement standard ERC20 methods. (For now).
           console.error(`Blacklisting token at address ${_tokenAddr}`);
-          TokenDAO.addToken({ address: _tokenAddr, blacklisted: true });
+          Token.addToken({ address: _tokenAddr, blacklisted: true });
           blacklistedToken = true;
           continue;
         }
 
         console.log(`Adding new token: ${sym} - ${name} - ${decimals}`);
-        await TokenDAO.addToken({ address: _tokenAddr, sym, name, decimals, blacklisted: false });
+        await Token.addToken({ address: _tokenAddr, sym, name, decimals, blacklisted: false });
 
       }
     }
@@ -306,7 +306,7 @@ export class UniswappyV2EthPair extends EthMarket {
   async getReservesRatioInWETH(): Promise<number> {
     const tokenAddress = this.tokens[0] === WETH_ADDRESS ? this.tokens[1] : this.tokens[0];
 
-    const token = await TokenDAO.getToken(tokenAddress);
+    const token = await Token.getToken(tokenAddress);
     const tokenDecimals = token.decimals;
 
     const _wethReserves = this._tokenBalances[WETH_ADDRESS];
