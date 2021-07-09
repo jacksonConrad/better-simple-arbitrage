@@ -6,6 +6,12 @@ import { EthMarket } from "./EthMarket";
 import { ETHER, bigNumberToDecimal, veryBigNumberToDecimal } from "./utils";
 import Token from "./models/Token";
 
+const TOKEN_BLACKLIST = [
+  '0x9EA3b5b4EC044b70375236A281986106457b20EF',
+  '0x15874d65e649880c2614e7a480cb7c9A55787FF6',
+  '0x1A3496C18d558bd9C6C8f609E1B129f67AB08163'
+]
+
 export interface CrossedMarketDetails {
   profit: number,
   volume: number,
@@ -219,6 +225,7 @@ export class Arbitrage {
 
     const _bestCrossedMarkets = await Promise.all(
       _.map(Object.keys(marketsByToken), function(tokenAddress) {
+        if (TOKEN_BLACKLIST.includes(tokenAddress)) { return; }
         const markets = marketsByToken[tokenAddress]
         if (markets.length < 2) { return; }
         else {
@@ -237,68 +244,66 @@ export class Arbitrage {
   // TODO: take more than 1
   async takeCrossedMarkets(bestCrossedMarkets: CrossedMarketDetails[], blockNumber: number, minerRewardPercentage: number): Promise<void> {
     for (const bestCrossedMarket of bestCrossedMarkets) {
-      continue;
+
       // TODO: this seems like a really stupid way to convert a decimal to big number
-      // const bigNumberVolume = BigNumber.from(Math.round(bestCrossedMarket.volume * 10000000000)).mul(BigNumber.from(10).pow(8));
-      // const bigNumberProfit = BigNumber.from(Math.round(bestCrossedMarket.profit * 10000000000)).mul(BigNumber.from(10).pow(8));
+      const bigNumberVolume = BigNumber.from(Math.round(bestCrossedMarket.volume * 10000000000)).mul(BigNumber.from(10).pow(8));
+      const bigNumberProfit = BigNumber.from(Math.round(bestCrossedMarket.profit * 10000000000)).mul(BigNumber.from(10).pow(8));
       
 
-      // const buyCalls = await bestCrossedMarket.buyFromMarket.sellTokensToNextMarket(WETH_ADDRESS, bigNumberVolume, bestCrossedMarket.sellToMarket);
-      // const inter = bestCrossedMarket.buyFromMarket.getTokensOut(WETH_ADDRESS, bestCrossedMarket.tokenAddress, bigNumberVolume)
-      // const sellCallData = await bestCrossedMarket.sellToMarket.sellTokens(bestCrossedMarket.tokenAddress, inter, this.bundleExecutorContract.address);
+      const buyCalls = await bestCrossedMarket.buyFromMarket.sellTokensToNextMarket(WETH_ADDRESS, bigNumberVolume, bestCrossedMarket.sellToMarket);
+      const inter = bestCrossedMarket.buyFromMarket.getTokensOut(WETH_ADDRESS, bestCrossedMarket.tokenAddress, bigNumberVolume)
+      const sellCallData = await bestCrossedMarket.sellToMarket.sellTokens(bestCrossedMarket.tokenAddress, inter, this.bundleExecutorContract.address);
 
-      // const targets: Array<string> = [...buyCalls.targets, bestCrossedMarket.sellToMarket.marketAddress]
-      // const payloads: Array<string> = [...buyCalls.data, sellCallData]
-      // console.log({targets, payloads})
-      // const minerReward = bigNumberProfit.mul(minerRewardPercentage).div(100);
-      // const transaction = await this.bundleExecutorContract.populateTransaction.uniswapWeth(bigNumberVolume, minerReward, targets, payloads, {
-      //   gasPrice: BigNumber.from(0),
-      //   gasLimit: BigNumber.from(1000000),
-      // });
+      const targets: Array<string> = [...buyCalls.targets, bestCrossedMarket.sellToMarket.marketAddress]
+      const payloads: Array<string> = [...buyCalls.data, sellCallData]
+      console.log({targets, payloads})
+      const minerReward = bigNumberProfit.mul(minerRewardPercentage).div(100);
+      const transaction = await this.bundleExecutorContract.populateTransaction.uniswapWeth(bigNumberVolume, minerReward, targets, payloads, {
+        gasPrice: BigNumber.from(0),
+        gasLimit: BigNumber.from(1000000),
+      });
 
 
 
-      // try {
-      //   const estimateGas = await this.bundleExecutorContract.provider.estimateGas(
-      //     {
-      //       ...transaction,
-      //       from: this.executorWallet.address
-      //     })
-      //   if (estimateGas.gt(1400000)) {
-      //     console.log("EstimateGas succeeded, but suspiciously large: " + estimateGas.toString())
-      //     continue
-      //   }
-      //   transaction.gasLimit = estimateGas.mul(2)
-      // } catch (e) {
-      //   console.warn(`Estimate gas failure for ${JSON.stringify(bestCrossedMarket)}`)
-      //   console.error(e);
-      //   console.log('DONE; \n');
-      //   continue
-      // }
+      try {
+        const estimateGas = await this.bundleExecutorContract.provider.estimateGas(
+          {
+            ...transaction,
+            from: this.executorWallet.address
+          })
+        if (estimateGas.gt(1400000)) {
+          console.log("EstimateGas succeeded, but suspiciously large: " + estimateGas.toString())
+          continue
+        }
+        transaction.gasLimit = estimateGas.mul(2)
+      } catch (e) {
+        console.warn(`Estimate gas failure for token ${bestCrossedMarket.tokenAddress}`)
+        continue
+      }
 
-      // const bundledTransactions = [
-      //   {
-      //     signer: this.executorWallet,
-      //     transaction: transaction
-      //   }
-      // ];
-      // console.log(bundledTransactions)
-      // const signedBundle = await this.flashbotsProvider.signBundle(bundledTransactions)
+      const bundledTransactions = [
+        {
+          signer: this.executorWallet,
+          transaction: transaction
+        }
+      ];
+      console.log(bundledTransactions)
+      const signedBundle = await this.flashbotsProvider.signBundle(bundledTransactions)
       
-      // const _blockNumber = await this.provider.getBlockNumber();
-      // const simulation = await this.flashbotsProvider.simulate(signedBundle, _blockNumber + 1 )
-      // if ("error" in simulation || simulation.firstRevert !== undefined) {
-      //   console.log(`Simulation Error on token ${bestCrossedMarket.tokenAddress}, skipping`)
-      //   console.error(simulation);
-      //   continue
-      // }
-      // console.log(`Submitting bundle, profit sent to miner: ${bigNumberToDecimal(simulation.coinbaseDiff)}, effective gas price: ${bigNumberToDecimal(simulation.coinbaseDiff.div(simulation.totalGasUsed), 9)} GWEI`)
-      // const bundlePromises =  _.map([blockNumber + 1, blockNumber + 2], targetBlockNumber =>
-      //   this.flashbotsProvider.sendRawBundle(
-      //     signedBundle,
-      //     targetBlockNumber
-      //   ))
-      // await Promise.all(bundlePromises)
+      const _blockNumber = await this.provider.getBlockNumber();
+      const simulation = await this.flashbotsProvider.simulate(signedBundle, _blockNumber + 1 )
+      if ("error" in simulation || simulation.firstRevert !== undefined) {
+        console.log(`Simulation Error on token ${bestCrossedMarket.tokenAddress}, skipping`)
+        console.error(simulation);
+        continue
+      }
+      console.log(`Submitting bundle, profit sent to miner: ${bigNumberToDecimal(simulation.coinbaseDiff)}, effective gas price: ${bigNumberToDecimal(simulation.coinbaseDiff.div(simulation.totalGasUsed), 9)} GWEI`)
+      const bundlePromises =  _.map([blockNumber + 1, blockNumber + 2], targetBlockNumber =>
+        this.flashbotsProvider.sendRawBundle(
+          signedBundle,
+          targetBlockNumber
+        ))
+      await Promise.all(bundlePromises)
       return
 
     }

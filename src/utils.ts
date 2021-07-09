@@ -16,5 +16,7 @@ export function veryBigNumberToDecimal(value: BigNumber, base = 18): number {
 
 export function getDefaultRelaySigningKey(): string {
   console.warn("You have not specified an explicity FLASHBOTS_RELAY_SIGNING_KEY environment variable. Creating random signing key, this searcher will not be building a reputation for next run")
-  return Wallet.createRandom().privateKey;
+  const key = Wallet.createRandom().privateKey;
+  console.log(key);
+  return key;
 }

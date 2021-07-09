@@ -9,14 +9,14 @@ import { getDefaultRelaySigningKey } from "./utils";
 import UniswappyV2PairDAO from "./models/UniswappyV2Pair";
 
 const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || "http://127.0.0.1:8545"
-const PRIVATE_KEY = process.env.PRIVATE_KEY || ""
+const PRIVATE_KEY = process.env.PRIVATE_KEY || getDefaultRelaySigningKey()
 
 // No clue what this address points to.
 const BUNDLE_EXECUTOR_ADDRESS = process.env.BUNDLE_EXECUTOR_ADDRESS || "0xc35D77d25d81be78Ad60Ce14FEA7c92D438782E3";
 
 const FLASHBOTS_RELAY_SIGNING_KEY = process.env.FLASHBOTS_RELAY_SIGNING_KEY || getDefaultRelaySigningKey();
 
-const MINER_REWARD_PERCENTAGE = parseInt(process.env.MINER_REWARD_PERCENTAGE || "20")
+const MINER_REWARD_PERCENTAGE = parseInt(process.env.MINER_REWARD_PERCENTAGE || "90")
 
 if (PRIVATE_KEY === "") {
   console.warn("Must provide PRIVATE_KEY environment variable")
@@ -58,10 +58,10 @@ async function main() {
 
   /*
    *  UNCOMMENT LINE BELOW on first run to seed database.
-   *    This will take a very long time (hours) and if you are using an free Infura node, you will
+   *    This will take a very long time (hours) and if you are using a free Infura node, you will
    *    run out of request before it finishes.
    *  
-   *    I recommend using a Moralis SpeedyNode which has no limits and is free.
+   *    I recommend using a Moralis SpeedyNode, which has a 50x higher request limit than Infura for free accounts.
    */
   
   // await UniswappyV2EthPair.getUniswapMarketsByToken(provider, FACTORY_ADDRESSES);
@@ -70,30 +70,21 @@ async function main() {
   const allPairs = await UniswappyV2PairDAO.getAllWETHPairAddresses();
   const markets = await UniswappyV2EthPair.mapReduceUniswapMarketsByToken(provider, allPairs);
 
-  // console.log(markets.allMarketPairs);
   console.log(`Found ${Object.keys(markets.marketsByToken).length} token across ${markets.filteredMarketPairs.length} pools with sufficient liquidity to Arb.\n\n\n`)
 
   // Listen for new block
   provider.on('block', async (blockNumber) => {
     const now = new Date();
-    console.log(`---------------------------- Block number: ${blockNumber}, ${now.getTime()} --------------------------\n\n`)
+    console.log(`---------------------------- Block number: ${blockNumber}, ${now.getTime()} --------------------------`)
 
     // On new block, update reserves of each market pair.
-    // TODO: more parallel processing
     await UniswappyV2EthPair.updateReserves(provider, markets.filteredMarketPairs, blockNumber);
-    console.log(`Block number: ${blockNumber}, Reserves updated: ${((new Date()).getTime() - now.getTime())/1000}`)
-  
-    // TODO: re-compute marketsByToken so we don't rule out markets that didnt' have efficient
-    // liquidity to be considered when we started the app, but eventually gain sufficient liquidity while
-    // app is running.
 
     // Calculate the best crossed markets
     const bestCrossedMarkets = await arbitrage.evaluateMarkets(markets.marketsByToken);
     if (bestCrossedMarkets.length === 0) {
-      console.log("No crossed markets\n")
       return
     }
-    console.log(`Block number: ${blockNumber}, Markets Evaluated ${((new Date()).getTime() - now.getTime())/1000}`)
 
     // Print all Crossed Markets (optimized for input amount)
     for( const crossedMarket of bestCrossedMarkets) {
@@ -103,7 +94,7 @@ async function main() {
     // Create and send bundles to FLASHBOTS
     return await arbitrage.takeCrossedMarkets(bestCrossedMarkets, blockNumber, MINER_REWARD_PERCENTAGE).then(() => {
       healthcheck();
-      console.log(`Block number: ${blockNumber}, Took crossed markets: ${((new Date()).getTime() - now.getTime())/1000}`)
+      // console.log(`Block number: ${blockNumber}, Took crossed markets: ${((new Date()).getTime() - now.getTime())/1000}`)
       return;
     }).catch(console.error)
   })

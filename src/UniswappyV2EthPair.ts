@@ -16,7 +16,9 @@ const UNISWAP_BATCH_SIZE = 1000;
 // Not necessary, slightly speeds up loading initialization when we know tokens are bad
 // Estimate gas will ensure we aren't submitting bad bundles, but bad tokens waste time
 const TOKEN_BLACKLIST = [
-  '0x9EA3b5b4EC044b70375236A281986106457b20EF'
+  '0x9EA3b5b4EC044b70375236A281986106457b20EF',
+  '0x15874d65e649880c2614e7a480cb7c9A55787FF6',
+  '0x1A3496C18d558bd9C6C8f609E1B129f67AB08163'
 ]
 
 interface GroupedMarkets {
@@ -131,7 +133,7 @@ export class UniswappyV2EthPair extends EthMarket {
       // const uniswappyV2EthPair = new UniswappyV2EthPair(marketAddress, [pair[0], pair[1]], "");
       // marketPairs.push(uniswappyV2EthPair);
     }
-  };
+  }
 
   // Get all pools for specified Uniswappy DEX
   // 1. Fetch batch of pairs in DEX
@@ -195,7 +197,7 @@ export class UniswappyV2EthPair extends EthMarket {
     const marketsByToken = _.chain(allMarketPairs)
       // Filter out pairs that have more than 5 WETH in reserves
       .filter(pair => {
-        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(1))
+        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(3))
       })
       // Group by the non-WETH token
       .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
@@ -204,7 +206,7 @@ export class UniswappyV2EthPair extends EthMarket {
 
     const filteredMarketPairs = _.chain(allMarketPairs)
       .filter(pair => {
-        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(1))
+        return pair.getBalance(WETH_ADDRESS).gt(ETHER.mul(3))
       })
       .value()
     
@@ -234,7 +236,7 @@ export class UniswappyV2EthPair extends EthMarket {
     const uniswapQuery = new Contract(UNISWAP_LOOKUP_CONTRACT_ADDRESS, UNISWAP_QUERY_ABI, provider);
 
     const pairAddresses = allMarketPairs.map(marketPair => marketPair.marketAddress);
-    console.log("Updating market reserves, count:", pairAddresses.length)
+    // console.log("Updating market reserves, count:", pairAddresses.length)
 
     const reserves: Array<Array<BigNumber>> = (await uniswapQuery.functions.getReservesByPairs(pairAddresses))[0];
     // let pairsAtBlock: CreatePairAtBlockDTO[] = [];
