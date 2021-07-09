@@ -98,7 +98,7 @@ But another strategy is to narrow your search to a small subset of opportunities
 As I said earlier, doing this math with Javascript is not a great time. Perhaps you could offload the more complicated calculations to a service or script in a language that is better equipped.
 
 
-*********** BELOW IS THE ORIGINAL README FROM THE FLASHBOTS SIMPLE-ARBITRAGE REPO WITH MINOR UPDATES ****************
+**** BELOW IS THE ORIGINAL README FROM THE FLASHBOTS SIMPLE-ARBITRAGE REPO WITH MINOR UPDATES ****
 
 simple-arbitrage
 ================
